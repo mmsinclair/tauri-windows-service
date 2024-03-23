@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+    xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+    <Fragment>
+        <!-- these registry entries should be installed
+         to the target user's machine -->
+        <DirectoryRef Id="TARGETDIR">
+            <!-- groups together the registry entries to be installed -->
+            <!-- Guid="*" means the linker will generate a stable GUID -->
+            <!-- Note the unique `Id` we provide here -->
+            <Component Id="NymVPNServiceComponent" Guid="{0e18f10d-f621-4cb9-95e0-60795687bb6b}">
+                <File Id="NymVPNServiceExe" KeyPath="yes" Checksum="yes"
+                    Source="$(sys.SOURCEFILEDIR)..\..\..\nym-vpn-service\target\release\nym-vpn-daemon.exe" />
+
+                <!-- Daemon Service -->
+                <ServiceInstall Type="ownProcess" Name="NymVPNService"
+                    DisplayName="NymVPN Service"
+                    Description="NymVPN manages connections to the Nym network" Start="auto"
+                    Arguments="--service" ErrorControl="normal" Vital="yes" />
+
+                <util:ServiceConfig ServiceName="NymVPNService"
+                    FirstFailureActionType="restart" SecondFailureActionType="restart"
+                    ThirdFailureActionType="none" ResetPeriodInDays="1"
+                    RestartServiceDelayInSeconds="5" />
+
+                <ServiceControl Id="StartService" Start="install" Stop="both" Remove="both"
+                    Name="NymVPNService" Wait="yes" />
+            </Component>
+        </DirectoryRef>
+    </Fragment>
+</Wix>
