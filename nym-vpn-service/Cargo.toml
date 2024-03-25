@@ -17,7 +17,6 @@ tower-http = { version = "0.5.2", features = ["cors"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.6.0"
-once_cell = "1.19.0"
 eventlog = "0.2.2"
 winapi = { version = "0.3", features = ["winnt", "excpt"] }
 

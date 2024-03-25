@@ -521,7 +521,6 @@ dependencies = [
  "axum-server",
  "eventlog",
  "log",
- "once_cell",
  "thiserror",
  "tokio",
  "tower-http",

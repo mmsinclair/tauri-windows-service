@@ -1,28 +1,28 @@
-mod daemon;
-mod install;
-
 #[macro_use]
 extern crate windows_service;
 
-use crate::daemon::DaemonState;
-use log::info;
-use once_cell::sync::Lazy;
 use std::env;
 use std::ffi::OsString;
+use std::sync::{Arc, mpsc};
 use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{mpsc, Arc};
 use std::time::Duration;
+
+use log::info;
 use tokio::runtime::Runtime;
 use tokio::sync::Mutex;
 use windows_service::service::{
-    Service, ServiceAccess, ServiceAction, ServiceActionType, ServiceControl, ServiceControlAccept,
-    ServiceDependency, ServiceErrorControl, ServiceExitCode, ServiceFailureActions,
-    ServiceFailureResetPeriod, ServiceInfo, ServiceSidType, ServiceStartType, ServiceState,
+    ServiceControl, ServiceControlAccept,
+    ServiceDependency, ServiceErrorControl, ServiceExitCode,
+    ServiceInfo, ServiceStartType, ServiceState,
     ServiceStatus, ServiceType,
 };
 use windows_service::service_control_handler::{self, ServiceControlHandlerResult};
 use windows_service::service_dispatcher;
-use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
+
+use crate::daemon::DaemonState;
+
+mod daemon;
+mod install;
 
 define_windows_service!(ffi_service_main, my_service_main);
 
@@ -32,16 +32,6 @@ pub(crate) static SERVICE_DISPLAY_NAME: &str = "NymVPN Service";
 pub(crate) static SERVICE_DESCRIPTION: &str =
     "A service that creates and runs tunnels to the Nym network";
 static SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
-
-static SERVICE_ACCESS: Lazy<ServiceAccess> = Lazy::new(|| {
-    ServiceAccess::QUERY_CONFIG
-        | ServiceAccess::CHANGE_CONFIG
-        | ServiceAccess::START
-        | ServiceAccess::DELETE
-});
-
-const SERVICE_RECOVERY_LAST_RESTART_DELAY: Duration = Duration::from_secs(60 * 10);
-const SERVICE_FAILURE_RESET_PERIOD: Duration = Duration::from_secs(60 * 15);
 
 fn my_service_main(arguments: Vec<OsString>) {
     if let Err(_e) = run_service(arguments) {
@@ -140,62 +130,6 @@ pub enum InstallError {
     CreateService(#[source] windows_service::Error),
 }
 
-pub fn install_service() -> Result<(), InstallError> {
-    let manager_access = ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE;
-    let service_manager = ServiceManager::local_computer(None::<&str>, manager_access)
-        .map_err(InstallError::ConnectServiceManager)?;
-
-    let service = service_manager
-        .create_service(&get_service_info(), *SERVICE_ACCESS)
-        .or(open_update_service(&service_manager))
-        .map_err(InstallError::CreateService)?;
-
-    let recovery_actions = vec![
-        ServiceAction {
-            action_type: ServiceActionType::Restart,
-            delay: Duration::from_secs(3),
-        },
-        ServiceAction {
-            action_type: ServiceActionType::Restart,
-            delay: Duration::from_secs(30),
-        },
-        ServiceAction {
-            action_type: ServiceActionType::Restart,
-            delay: SERVICE_RECOVERY_LAST_RESTART_DELAY,
-        },
-    ];
-
-    let failure_actions = ServiceFailureActions {
-        reset_period: ServiceFailureResetPeriod::After(SERVICE_FAILURE_RESET_PERIOD),
-        reboot_msg: None,
-        command: None,
-        actions: Some(recovery_actions),
-    };
-
-    service
-        .update_failure_actions(failure_actions)
-        .map_err(InstallError::CreateService)?;
-    service
-        .set_failure_actions_on_non_crash_failures(true)
-        .map_err(InstallError::CreateService)?;
-
-    // Change how the service SID is added to the service process token.
-    // WireGuard needs this.
-    service
-        .set_config_service_sid_info(ServiceSidType::Unrestricted)
-        .map_err(InstallError::CreateService)?;
-
-    Ok(())
-}
-
-fn open_update_service(
-    service_manager: &ServiceManager,
-) -> Result<Service, windows_service::Error> {
-    let service = service_manager.open_service(SERVICE_NAME, *SERVICE_ACCESS)?;
-    service.change_config(&get_service_info())?;
-    Ok(service)
-}
-
 pub(crate) fn get_service_info() -> ServiceInfo {
     ServiceInfo {
         name: OsString::from(SERVICE_NAME),
@@ -218,9 +152,31 @@ pub(crate) fn get_service_info() -> ServiceInfo {
 }
 
 fn main() -> Result<(), windows_service::Error> {
-    // crate::install::install_service()?;
+    let args: Vec<String> = env::args().collect();
 
-    println!("Setup complete");
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) || args.contains(&"/?".to_string()) {
+        println!("Options are:");
+        println!();
+        println!("--install-service    Install the {} service", SERVICE_NAME);
+        println!("--uninstall-service  Uninstall the {} service", SERVICE_NAME);
+        println!();
+        return Ok(());
+    }
+
+    if args.contains(&"--install-service".to_string()) {
+        println!("Processing request to install {} as a service...", SERVICE_NAME);
+        crate::install::install_service()?;
+        return Ok(());
+    }
+
+    if args.contains(&"--uninstall-service".to_string()) {
+        println!("Processing request to uninstall {} as a service...", SERVICE_NAME);
+        crate::install::uninstall_service()?;
+        return Ok(());
+    }
+
+    println!("Configuring logging source...");
+    eventlog::init(SERVICE_DISPLAY_NAME, log::Level::Info).unwrap();
 
     // Register generated `ffi_service_main` with the system and start the service, blocking
     // this thread until the service is stopped.
