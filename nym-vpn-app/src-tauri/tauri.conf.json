@@ -50,6 +50,10 @@
         "wix": {
           "fragmentPaths": ["./windows/service.wxs"],
           "componentRefs": ["NymVPNServiceComponent"]
+        },
+        "nsis": {
+          "template": "./windows/installer.nsi",
+          "installMode": "perMachine"
         }
       }
     }

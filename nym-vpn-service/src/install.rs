@@ -74,3 +74,17 @@ pub(crate) fn uninstall_service() -> windows_service::Result<()> {
 
     Ok(())
 }
+
+pub(crate) fn start_service() -> windows_service::Result<()> {
+    let manager_access = ServiceManagerAccess::CONNECT;
+    let service_manager = ServiceManager::local_computer(None::<&str>, manager_access)?;
+
+    let service_access = ServiceAccess::QUERY_STATUS | ServiceAccess::START;
+    let service = service_manager.open_service(SERVICE_NAME, service_access)?;
+
+    if service.query_status()?.current_state != ServiceState::Running {
+        // TODO: figure out how to pass an empty array or null
+        service.start(&[std::ffi::OsStr::new("")])?;
+    }
+    Ok(())
+}

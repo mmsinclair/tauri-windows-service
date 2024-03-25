@@ -159,6 +159,7 @@ fn main() -> Result<(), windows_service::Error> {
         println!();
         println!("--install-service    Install the {} service", SERVICE_NAME);
         println!("--uninstall-service  Uninstall the {} service", SERVICE_NAME);
+        println!("--start-service      Start the {} service", SERVICE_NAME);
         println!();
         return Ok(());
     }
@@ -172,6 +173,12 @@ fn main() -> Result<(), windows_service::Error> {
     if args.contains(&"--uninstall-service".to_string()) {
         println!("Processing request to uninstall {} as a service...", SERVICE_NAME);
         crate::install::uninstall_service()?;
+        return Ok(());
+    }
+
+    if args.contains(&"--start-service".to_string()) {
+        println!("Processing request to start service {}...", SERVICE_NAME);
+        crate::install::start_service()?;
         return Ok(());
     }
 
